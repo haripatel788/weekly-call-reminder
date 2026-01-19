@@ -4,11 +4,10 @@ import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-# These are provided by GitHub Actions Secrets (BOT_TOKEN, CHAT_ID)
+# These are provided by GitHub Actions Secrets
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = int(os.environ["CHAT_ID"])
-THREAD_ID = int(os.environ["THREAD_ID"])
-
+THREAD_ID = int(os.environ["THREAD_ID"])  # Topic (sub-channel) ID for "Weekly Call"
 
 TZ = ZoneInfo("America/New_York")
 
@@ -73,10 +72,9 @@ def send_message(text: str) -> None:
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
-        "message_thread_id": THREAD_ID,
+        "message_thread_id": THREAD_ID,  # <-- This is what targets the Weekly Call topic
         "text": text,
     }
-
     r = requests.post(url, data=payload, timeout=20)
     r.raise_for_status()
 
@@ -88,7 +86,7 @@ def build_message(day_word: str) -> str:
     shlok_jaynaad, prasang, ending_shlok = weekly_assignments()
 
     return f"""Reminder Weekly Call
-<b>Tuesday</b> {tuesday_short}
+Tuesday {tuesday_short}
 {day_word} @9
 
 Agenda:
