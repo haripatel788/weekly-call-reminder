@@ -26,7 +26,7 @@ NAMES_POOL = [
 ]
 
 # Fixed roles stay the same
-HARIBHAI_NAME = "haribhai"
+HARIBHAI_NAME = "Haribhai"
 
 def get_next_tuesday(dt: datetime) -> datetime:
     """Return the date/time for the next (or current) Tuesday in the same timezone."""
@@ -72,7 +72,6 @@ def send_message(text: str) -> None:
     payload = {
         "chat_id": CHAT_ID,
         "text": text,
-        # No parse_mode needed since we are sending plain text
     }
     r = requests.post(url, data=payload, timeout=20)
     r.raise_for_status()
@@ -84,7 +83,6 @@ def build_message(day_word: str) -> str:
     tuesday_short, _ = get_tuesday_short_and_seed()
     shlok_jaynaad, prasang, ending_shlok = weekly_assignments()
 
-    # Matches your preferred formatting
     return f"""Reminder Weekly Call
 Tuesday {tuesday_short}
 {day_word} @9
@@ -97,6 +95,9 @@ Agenda:
 ( {HARIBHAI_NAME} )
 📮Announcements ( {HARIBHAI_NAME} )
 📮Ending Sholka  ({ending_shlok})
+
+Link:
+https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf
 """
 
 def monday_message():
