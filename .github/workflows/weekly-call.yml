@@ -1,0 +1,66 @@
+name: Weekly Call Reminders
+
+on:
+  schedule:
+    # Run at both 22:00 and 23:00 UTC so it always hits 6:00 PM ET (DST-safe)
+    - cron: "0 22 * * 1,2"
+    - cron: "0 23 * * 1,2"
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "Send which reminder now?"
+        required: true
+        type: choice
+        options:
+          - monday
+          - tuesday
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Decide which message to send (6:00 PM ET only)
+        id: decide
+        run: |
+          python - <<'PY'
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          now = datetime.now(ZoneInfo("America/New_York"))
+          day = None
+
+          if now.weekday() == 0 and now.hour == 18:
+              day = "monday"
+          elif now.weekday() == 1 and now.hour == 18:
+              day = "tuesday"
+
+          print("ET time:", now.isoformat())
+          print("Sending:", day)
+
+          with open("$GITHUB_OUTPUT", "a") as f:
+              f.write(f"day={day or ''}\n")
+          PY
+
+      - name: Send scheduled message
+        if: steps.decide.outputs.day != ''
+        run: python weekly_call_bot.py ${{ steps.decide.outputs.day }}
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+
+      - name: Manual run
+        if: github.event_name == 'workflow_dispatch'
+        run: python weekly_call_bot.py ${{ github.event.inputs.day }}
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+
