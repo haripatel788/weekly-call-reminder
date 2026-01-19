@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 # These are provided by GitHub Actions Secrets (BOT_TOKEN, CHAT_ID)
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = int(os.environ["CHAT_ID"])
+THREAD_ID = int(os.environ["THREAD_ID"])
+
 
 TZ = ZoneInfo("America/New_York")
 
@@ -71,8 +73,10 @@ def send_message(text: str) -> None:
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
+        "message_thread_id": THREAD_ID,
         "text": text,
     }
+
     r = requests.post(url, data=payload, timeout=20)
     r.raise_for_status()
 
@@ -84,7 +88,7 @@ def build_message(day_word: str) -> str:
     shlok_jaynaad, prasang, ending_shlok = weekly_assignments()
 
     return f"""Reminder Weekly Call
-Tuesday {tuesday_short}
+<b>Tuesday</b> {tuesday_short}
 {day_word} @9
 
 Agenda:
