@@ -39,10 +39,11 @@ jobs:
           day = None
 
           # Allow any time during the 6 PM hour
-          if now.weekday() == 0 and now.hour == 18:
-              day = "monday"
-          elif now.weekday() == 1 and now.hour == 18:
-              day = "tuesday"
+          if now.weekday() == 0 and now.hour in (18, 19):
+            day = "monday"
+          elif now.weekday() == 1 and now.hour in (18, 19):
+            day = "tuesday"
+
 
           print("ET time:", now.isoformat(), "weekday:", now.weekday())
           print("Sending:", day)
