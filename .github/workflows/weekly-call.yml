@@ -38,18 +38,19 @@ jobs:
           now = datetime.now(ZoneInfo("America/New_York"))
           day = None
 
-# Allow any time during the 6 PM hour
+          # Allow any time during the 6 PM hour
           if now.weekday() == 0 and now.hour == 18:
-            day = "monday"
+              day = "monday"
           elif now.weekday() == 1 and now.hour == 18:
-            day = "tuesday"
+              day = "tuesday"
 
-            print("ET time:", now.isoformat(), "weekday:", now.weekday())
-            print("Sending:", day)
+          print("ET time:", now.isoformat(), "weekday:", now.weekday())
+          print("Sending:", day)
 
           with open("$GITHUB_OUTPUT", "a") as f:
               f.write(f"day={day or ''}\n")
           PY
+
 
       - name: Send scheduled message
         if: steps.decide.outputs.day != ''
