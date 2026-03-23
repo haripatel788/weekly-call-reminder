@@ -2,77 +2,78 @@ import os
 import json
 import random
 import requests
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-# Fetching secrets safely
+# Fetching secrets securely
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 THREAD_ID = os.environ.get("THREAD_ID")
+GCP_CREDENTIALS_JSON = os.environ.get("GCP_CREDENTIALS")
+
+# EDIT THIS to match the exact title of your Google Sheet
+SHEET_NAME = "Weekly Call Tracker"
 
 TZ = ZoneInfo("America/New_York")
 NAMES_POOL = ["Devbhai", "Prathambhai", "Dhruvbhai C", "Krishbhai", "Prithvibhai", "Rudrakshbhai", "Sohambhai", "Tilakbhai", "Shivambhai", "Tirthbhai"]
 HARIBHAI_NAME = "Haribhai"
-HISTORY_FILE = "history.json"
 
 def get_next_tuesday(dt):
     days_until_tuesday = (1 - dt.weekday()) % 7
     return dt + timedelta(days=days_until_tuesday)
 
-def load_or_init_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r") as f:
-            return json.load(f)
-    return {
-        "frequencies": {name: 0 for name in NAMES_POOL},
-        "last_week": [],
-        "current_week": {}
-    }
-
-def save_history(history):
-    with open(HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=4)
+def connect_to_sheet():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds_dict = json.loads(GCP_CREDENTIALS_JSON)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    return client.open(SHEET_NAME).sheet1
 
 def get_weekly_assignments():
     now = datetime.now(TZ)
     tuesday = get_next_tuesday(now)
-    tuesday_str = tuesday.strftime("%Y-%m-%d")
+    tuesday_str = tuesday.strftime("%b %d, %Y")
     
-    history = load_or_init_history()
+    sheet = connect_to_sheet()
     
-    # Check if we already picked for this upcoming Tuesday
-    if history.get("current_week", {}).get("week_of") == tuesday_str:
-        cw = history["current_week"]
-        return cw["shlok_jaynaad"], cw["prasang"], cw["ending_shlok"], tuesday.strftime("%b %d")
+    # If the sheet is completely empty, set up the headers
+    if not sheet.get_all_values():
+        sheet.append_row(["Week Of", "Shlok & Jaynaad", "Prasang", "Ending Shlok"])
+        
+    records = sheet.get_all_records()
+    
+    # 1. Check if we already picked names for THIS upcoming Tuesday
+    # (Prevents picking new names when the bot runs multiple times a week)
+    if records and str(records[-1].get("Week Of")) == tuesday_str:
+        return records[-1]["Shlok & Jaynaad"], records[-1]["Prasang"], records[-1]["Ending Shlok"], tuesday.strftime("%b %d")
 
-    # --- New Week Rotation Logic ---
-    # 1. Anyone who did it last week is on cooldown
-    available_names = [n for n in NAMES_POOL if n not in history.get("last_week", [])]
+    # 2. Calculate frequencies by counting names in the log
+    frequencies = {name: 0 for name in NAMES_POOL}
+    for row in records:
+        for role in ["Shlok & Jaynaad", "Prasang", "Ending Shlok"]:
+            if row.get(role) in frequencies:
+                frequencies[row[role]] += 1
+                
+    # 3. Figure out who went last week
+    last_week_names = []
+    if records:
+        last_week_names = [records[-1].get("Shlok & Jaynaad"), records[-1].get("Prasang"), records[-1].get("Ending Shlok")]
+        
+    # 4. Filter out last week's participants and sort by frequency
+    available_names = [n for n in NAMES_POOL if n not in last_week_names]
+    random.shuffle(available_names) # Shuffle to break ties randomly
+    available_names.sort(key=lambda x: frequencies[x])
     
-    # 2. Sort by frequency (lowest first). Shuffle first to randomly break frequency ties.
-    random.shuffle(available_names)
-    available_names.sort(key=lambda x: history["frequencies"].get(x, 0))
-    
-    # 3. Pick top 3 and shuffle to assign their specific roles
+    # 5. Pick the top 3 and assign roles
     picks = available_names[:3]
     random.shuffle(picks)
     shlok, prasang, ending = picks[0], picks[1], picks[2]
     
-    # 4. Update history state
-    cw = history.get("current_week", {})
-    history["last_week"] = [cw.get("shlok_jaynaad"), cw.get("prasang"), cw.get("ending_shlok")]
+    # 6. Save the new week's data to the Google Sheet!
+    sheet.append_row([tuesday_str, shlok, prasang, ending])
     
-    history["current_week"] = {
-        "week_of": tuesday_str,
-        "shlok_jaynaad": shlok,
-        "prasang": prasang,
-        "ending_shlok": ending
-    }
-    
-    for p in picks:
-        history["frequencies"][p] = history["frequencies"].get(p, 0) + 1
-        
-    save_history(history)
     return shlok, prasang, ending, tuesday.strftime("%b %d")
 
 def get_time_phrase():
@@ -84,7 +85,7 @@ def get_time_phrase():
             return "Tonight @ 9:30 PM EST (Starts in 1 hour!)"
         else:
             return "Tonight @ 9:30 PM EST (Starts in 15 mins!)"
-    return "Upcoming Tuesday @ 9:30 PM EST"  # Manual trigger fallback
+    return "Upcoming Tuesday @ 9:30 PM EST"
 
 def send_message():
     shlok_jaynaad, prasang, ending_shlok, tuesday_short = get_weekly_assignments()
@@ -102,15 +103,8 @@ Agenda:
 📮Announcements ( {HARIBHAI_NAME} )
 📮Ending Sholka ({ending_shlok})
 
-
-Use this link to join the call. Please be on time and come prepared with your assigned sections.
-https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf
-
-Use this link to get your material for this week!
-https://baps365.sharepoint.com/sites/BMPortal/
-
-**React to this message when read!**
-"""
+Link:
+https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf"""
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
