@@ -14,7 +14,7 @@ THREAD_ID = os.environ.get("THREAD_ID")
 GCP_CREDENTIALS_JSON = os.environ.get("GCP_CREDENTIALS")
 
 # EDIT THIS to match the exact title of your Google Sheet
-SHEET_NAME = "Weekly Call Tracker"
+SHEET_NAME = "Weekly Call Rotation"
 
 TZ = ZoneInfo("America/New_York")
 NAMES_POOL = ["Devbhai", "Prathambhai", "Dhruvbhai C", "Krishbhai", "Prithvibhai", "Rudrakshbhai", "Sohambhai", "Tilakbhai", "Shivambhai", "Tirthbhai"]
@@ -38,14 +38,20 @@ def get_weekly_assignments():
     
     sheet = connect_to_sheet()
     
+    # Define the exact columns we want for the dashboard
+    headers = [
+        "Week Of", "Generated On", "Shlok & Jaynaad", "Prasang", 
+        "Ending Shlok", "Shaba Overview", "Eligible Pool Size", 
+        "On Cooldown", "Total Attendance", "Speaker No-Shows"
+    ]
+    
     # If the sheet is completely empty, set up the headers
     if not sheet.get_all_values():
-        sheet.append_row(["Week Of", "Shlok & Jaynaad", "Prasang", "Ending Shlok"])
+        sheet.append_row(headers)
         
     records = sheet.get_all_records()
     
     # 1. Check if we already picked names for THIS upcoming Tuesday
-    # (Prevents picking new names when the bot runs multiple times a week)
     if records and str(records[-1].get("Week Of")) == tuesday_str:
         return records[-1]["Shlok & Jaynaad"], records[-1]["Prasang"], records[-1]["Ending Shlok"], tuesday.strftime("%b %d")
 
@@ -60,6 +66,7 @@ def get_weekly_assignments():
     last_week_names = []
     if records:
         last_week_names = [records[-1].get("Shlok & Jaynaad"), records[-1].get("Prasang"), records[-1].get("Ending Shlok")]
+        last_week_names = [n for n in last_week_names if n] # Filter out empty blanks
         
     # 4. Filter out last week's participants and sort by frequency
     available_names = [n for n in NAMES_POOL if n not in last_week_names]
@@ -71,8 +78,25 @@ def get_weekly_assignments():
     random.shuffle(picks)
     shlok, prasang, ending = picks[0], picks[1], picks[2]
     
-    # 6. Save the new week's data to the Google Sheet!
-    sheet.append_row([tuesday_str, shlok, prasang, ending])
+    # 6. Format the automated data for the sheet
+    generated_on = now.strftime("%b %d, %Y %I:%M %p")
+    pool_size = len(available_names)
+    cooldown_str = ", ".join(last_week_names) if last_week_names else "None"
+    
+    # 7. Save the new week's data to the Google Sheet!
+    new_row = [
+        tuesday_str,         # Week Of
+        generated_on,        # Generated On
+        shlok,               # Shlok & Jaynaad
+        prasang,             # Prasang
+        ending,              # Ending Shlok
+        HARIBHAI_NAME,       # Shaba Overview
+        pool_size,           # Eligible Pool Size
+        cooldown_str,        # On Cooldown
+        "",                  # Total Attendance (Leave blank for manual entry)
+        ""                   # Speaker No-Shows (Leave blank for manual entry)
+    ]
+    sheet.append_row(new_row)
     
     return shlok, prasang, ending, tuesday.strftime("%b %d")
 
