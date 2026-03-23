@@ -102,10 +102,14 @@ Agenda:
 📮Announcements ( {HARIBHAI_NAME} )
 📮Ending Sholka ({ending_shlok})
 
-Link:
+
+Use this link to join the call. Please be on time and come prepared with your assigned sections.
 https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf
 
-React to this message when read!
+Use this link to get your material for this week!
+https://baps365.sharepoint.com/sites/BMPortal/
+
+**React to this message when read!**
 """
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
