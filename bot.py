@@ -14,7 +14,7 @@ THREAD_ID = os.environ.get("THREAD_ID")
 GCP_CREDENTIALS_JSON = os.environ.get("GCP_CREDENTIALS")
 
 # EDIT THIS to match the exact title of your Google Sheet
-SHEET_NAME = "Weekly Call Rotation"
+SHEET_NAME = "Weekly Call Tracker"
 
 TZ = ZoneInfo("America/New_York")
 NAMES_POOL = ["Devbhai", "Prathambhai", "Dhruvbhai C", "Krishbhai", "Prithvibhai", "Rudrakshbhai", "Sohambhai", "Tilakbhai", "Shivambhai", "Tirthbhai"]
