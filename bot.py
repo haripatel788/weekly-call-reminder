@@ -103,7 +103,10 @@ Agenda:
 📮Ending Sholka ({ending_shlok})
 
 Link:
-https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf"""
+https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf
+
+React to this message when read!
+"""
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
