@@ -3,7 +3,7 @@ import json
 import random
 import requests
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -27,75 +27,97 @@ def get_next_tuesday(dt):
 def connect_to_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(GCP_CREDENTIALS_JSON)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
-    return client.open(SHEET_NAME).sheet1
+    return client.open(SHEET_NAME) # Returns the whole spreadsheet file
 
 def get_weekly_assignments():
     now = datetime.now(TZ)
     tuesday = get_next_tuesday(now)
     tuesday_str = tuesday.strftime("%b %d, %Y")
     
-    sheet = connect_to_sheet()
+    spreadsheet = connect_to_sheet()
     
-    # Gets all data assuming Row 1 contains your manually typed headers
-    records = sheet.get_all_records()
+    # Target the tabs
+    main_sheet = spreadsheet.get_worksheet(0) # Your first tab (the logs)
+    freq_sheet = spreadsheet.worksheet("Frequency Tracker") # Your second tab (the chart)
+    
+    records = main_sheet.get_all_records()
     
     # 1. Check if we already picked names for THIS upcoming Tuesday
     if records and str(records[-1].get("Week Of")) == tuesday_str:
         return records[-1].get("Shlok & Jaynaad", ""), records[-1].get("Prasang", ""), records[-1].get("Ending Shlok", ""), tuesday.strftime("%b %d")
 
-    # 2. Calculate frequencies by counting names in the log
-    frequencies = {name: 0 for name in NAMES_POOL}
+    # 2. Track detailed frequencies for the new chart
+    detailed_freqs = {name: {"Shlok & Jaynaad": 0, "Prasang": 0, "Ending Shlok": 0, "Total": 0} for name in NAMES_POOL}
+    
     for row in records:
         for role in ["Shlok & Jaynaad", "Prasang", "Ending Shlok"]:
-            if row.get(role) in frequencies:
-                frequencies[row[role]] += 1
+            person = row.get(role)
+            if person in detailed_freqs:
+                detailed_freqs[person][role] += 1
+                detailed_freqs[person]["Total"] += 1
                 
     # 3. Figure out who went last week
     last_week_names = []
     if records:
         last_week_names = [records[-1].get("Shlok & Jaynaad"), records[-1].get("Prasang"), records[-1].get("Ending Shlok")]
-        last_week_names = [n for n in last_week_names if n] # Filter out empty blanks
+        last_week_names = [n for n in last_week_names if n]
         
-    # 4. Filter out last week's participants and sort by frequency
+    # 4. Filter out last week's participants and sort by total frequency
     available_names = [n for n in NAMES_POOL if n not in last_week_names]
-    random.shuffle(available_names) # Shuffle to break ties randomly
-    available_names.sort(key=lambda x: frequencies[x])
+    random.shuffle(available_names) 
+    available_names.sort(key=lambda x: detailed_freqs[x]["Total"])
     
     # 5. Pick the top 3 and assign roles
     picks = available_names[:3]
     random.shuffle(picks)
     shlok, prasang, ending = picks[0], picks[1], picks[2]
     
-    # 6. Format the automated data for the sheet
+    # Add the newly picked roles to our frequency tracker before writing it
+    detailed_freqs[shlok]["Shlok & Jaynaad"] += 1
+    detailed_freqs[shlok]["Total"] += 1
+    detailed_freqs[prasang]["Prasang"] += 1
+    detailed_freqs[prasang]["Total"] += 1
+    detailed_freqs[ending]["Ending Shlok"] += 1
+    detailed_freqs[ending]["Total"] += 1
+    
+    # 6. Save standard data to the FIRST tab
     generated_on = now.strftime("%b %d, %Y %I:%M %p")
     pool_size = len(available_names)
     cooldown_str = ", ".join(last_week_names) if last_week_names else "None"
     
-    # 7. Save the new week's data to the Google Sheet (automatically appends to the first empty row!)
     new_row = [
-        tuesday_str,         # Week Of
-        generated_on,        # Generated On
-        shlok,               # Shlok & Jaynaad
-        prasang,             # Prasang
-        ending,              # Ending Shlok
-        HARIBHAI_NAME,       # Shaba Overview
-        pool_size,           # Eligible Pool Size
-        cooldown_str,        # On Cooldown
-        "",                  # Total Attendance (Leave blank for manual entry)
-        ""                   # Speaker No-Shows (Leave blank for manual entry)
+        tuesday_str, generated_on, shlok, prasang, ending,
+        HARIBHAI_NAME, pool_size, cooldown_str, "", ""
     ]
-    sheet.append_row(new_row)
+    main_sheet.append_row(new_row)
+    
+    # 7. Rebuild the SECOND tab (Frequency Tracker)
+    freq_data = [["Name", "Shlok & Jaynaad", "Prasang", "Ending Shlok", "Total"]]
+    
+    # Sort the chart by Total frequency (highest at the top)
+    sorted_names = sorted(NAMES_POOL, key=lambda x: detailed_freqs[x]["Total"], reverse=True)
+    for name in sorted_names:
+        freq_data.append([
+            name,
+            detailed_freqs[name]["Shlok & Jaynaad"],
+            detailed_freqs[name]["Prasang"],
+            detailed_freqs[name]["Ending Shlok"],
+            detailed_freqs[name]["Total"]
+        ])
+        
+    freq_sheet.clear() # Wipes the old chart
+    freq_sheet.append_rows(freq_data) # Drops the fresh chart in
     
     return shlok, prasang, ending, tuesday.strftime("%b %d")
 
 def get_time_phrase():
     now = datetime.now(TZ)
-    if now.weekday() == 0:  # Monday
+    if now.weekday() == 0:  
         return "Tomorrow @ 9:30 PM EST"
-    elif now.weekday() == 1:  # Tuesday
-        if now.hour == 20:  # 8 PM EST
+    elif now.weekday() == 1:  
+        if now.hour == 20: 
             return "Tonight @ 9:30 PM EST (Starts in 1 hour!)"
         else:
             return "Tonight @ 9:30 PM EST (Starts in 15 mins!)"
