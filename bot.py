@@ -3,7 +3,7 @@ import json
 import random
 import requests
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -17,7 +17,6 @@ GCP_CREDENTIALS_JSON = os.environ.get("GCP_CREDENTIALS")
 SHEET_NAME = "Weekly Call Tracker"
 
 TZ = ZoneInfo("America/New_York")
-NAMES_POOL = ["Devbhai", "Prathambhai", "Dhruvbhai C", "Krishbhai", "Prithvibhai", "Rudrakshbhai", "Sohambhai", "Tilakbhai", "Shivambhai", "Tirthbhai"]
 HARIBHAI_NAME = "Haribhai"
 
 def get_next_tuesday(dt):
@@ -27,9 +26,9 @@ def get_next_tuesday(dt):
 def connect_to_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(GCP_CREDENTIALS_JSON)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
-    return client.open(SHEET_NAME) # Returns the whole spreadsheet file
+    return client.open(SHEET_NAME) 
 
 def get_weekly_assignments():
     now = datetime.now(TZ)
@@ -38,18 +37,46 @@ def get_weekly_assignments():
     
     spreadsheet = connect_to_sheet()
     
-    # Target the tabs
-    main_sheet = spreadsheet.get_worksheet(0) # Your first tab (the logs)
-    freq_sheet = spreadsheet.worksheet("Frequency Tracker") # Your second tab (the chart)
+    # Target all three tabs
+    main_sheet = spreadsheet.get_worksheet(0)           # Logs
+    freq_sheet = spreadsheet.worksheet("Frequency Tracker") # Chart
+    roster_sheet = spreadsheet.worksheet("Roster")      # New Roster
     
+    # --- UPGRADE 1 & 3: Read from Roster & Check Vacation Status ---
+    roster_records = roster_sheet.get_all_records()
+    all_names = []
+    eligible_pool = []
+    name_to_tag = {}
+    
+    for row in roster_records:
+        name = str(row.get("Name", "")).strip()
+        if not name:
+            continue
+            
+        tag = str(row.get("Telegram Tag", "")).strip()
+        status = str(row.get("Status", "")).strip().lower()
+        
+        all_names.append(name)
+        # Fallback to standard name if they don't have a Telegram tag yet
+        name_to_tag[name] = tag if tag else name 
+        
+        if status != "vacation":
+            eligible_pool.append(name)
+    
+    # --- Existing Logic ---
     records = main_sheet.get_all_records()
     
-    # 1. Check if we already picked names for THIS upcoming Tuesday
     if records and str(records[-1].get("Week Of")) == tuesday_str:
-        return records[-1].get("Shlok & Jaynaad", ""), records[-1].get("Prasang", ""), records[-1].get("Ending Shlok", ""), tuesday.strftime("%b %d")
+        return (
+            records[-1].get("Shlok & Jaynaad", ""), 
+            records[-1].get("Prasang", ""), 
+            records[-1].get("Ending Shlok", ""), 
+            tuesday.strftime("%b %d"),
+            name_to_tag # Pass the dictionary to tag them in the message
+        )
 
-    # 2. Track detailed frequencies for the new chart
-    detailed_freqs = {name: {"Shlok & Jaynaad": 0, "Prasang": 0, "Ending Shlok": 0, "Total": 0} for name in NAMES_POOL}
+    # Detailed frequencies tracking ALL names (even those on vacation)
+    detailed_freqs = {name: {"Shlok & Jaynaad": 0, "Prasang": 0, "Ending Shlok": 0, "Total": 0} for name in all_names}
     
     for row in records:
         for role in ["Shlok & Jaynaad", "Prasang", "Ending Shlok"]:
@@ -58,23 +85,21 @@ def get_weekly_assignments():
                 detailed_freqs[person][role] += 1
                 detailed_freqs[person]["Total"] += 1
                 
-    # 3. Figure out who went last week
     last_week_names = []
     if records:
         last_week_names = [records[-1].get("Shlok & Jaynaad"), records[-1].get("Prasang"), records[-1].get("Ending Shlok")]
         last_week_names = [n for n in last_week_names if n]
         
-    # 4. Filter out last week's participants and sort by total frequency
-    available_names = [n for n in NAMES_POOL if n not in last_week_names]
+    # Filter out last week's participants from the ACTIVE eligible pool
+    available_names = [n for n in eligible_pool if n not in last_week_names]
     random.shuffle(available_names) 
     available_names.sort(key=lambda x: detailed_freqs[x]["Total"])
     
-    # 5. Pick the top 3 and assign roles
+    # Pick the top 3
     picks = available_names[:3]
     random.shuffle(picks)
     shlok, prasang, ending = picks[0], picks[1], picks[2]
     
-    # Add the newly picked roles to our frequency tracker before writing it
     detailed_freqs[shlok]["Shlok & Jaynaad"] += 1
     detailed_freqs[shlok]["Total"] += 1
     detailed_freqs[prasang]["Prasang"] += 1
@@ -82,7 +107,7 @@ def get_weekly_assignments():
     detailed_freqs[ending]["Ending Shlok"] += 1
     detailed_freqs[ending]["Total"] += 1
     
-    # 6. Save standard data to the FIRST tab
+    # Save standard data to logs (Uses REAL names, not tags)
     generated_on = now.strftime("%b %d, %Y %I:%M %p")
     pool_size = len(available_names)
     cooldown_str = ", ".join(last_week_names) if last_week_names else "None"
@@ -93,11 +118,10 @@ def get_weekly_assignments():
     ]
     main_sheet.append_row(new_row)
     
-    # 7. Rebuild the SECOND tab (Frequency Tracker)
+    # Rebuild Frequency Tracker
     freq_data = [["Name", "Shlok & Jaynaad", "Prasang", "Ending Shlok", "Total"]]
+    sorted_names = sorted(all_names, key=lambda x: detailed_freqs[x]["Total"], reverse=True)
     
-    # Sort the chart by Total frequency (highest at the top)
-    sorted_names = sorted(NAMES_POOL, key=lambda x: detailed_freqs[x]["Total"], reverse=True)
     for name in sorted_names:
         freq_data.append([
             name,
@@ -107,10 +131,10 @@ def get_weekly_assignments():
             detailed_freqs[name]["Total"]
         ])
         
-    freq_sheet.clear() # Wipes the old chart
-    freq_sheet.append_rows(freq_data) # Drops the fresh chart in
+    freq_sheet.clear() 
+    freq_sheet.append_rows(freq_data) 
     
-    return shlok, prasang, ending, tuesday.strftime("%b %d")
+    return shlok, prasang, ending, tuesday.strftime("%b %d"), name_to_tag
 
 def get_time_phrase():
     now = datetime.now(TZ)
@@ -124,8 +148,13 @@ def get_time_phrase():
     return "Upcoming Tuesday @ 9:30 PM EST"
 
 def send_message():
-    shlok_jaynaad, prasang, ending_shlok, tuesday_short = get_weekly_assignments()
+    shlok, prasang, ending, tuesday_short, name_to_tag = get_weekly_assignments()
     time_phrase = get_time_phrase()
+    
+    # --- UPGRADE 2: Map the real names to their Telegram Tags for the message ---
+    shlok_tag = name_to_tag.get(shlok, shlok)
+    prasang_tag = name_to_tag.get(prasang, prasang)
+    ending_tag = name_to_tag.get(ending, ending)
     
     text = f"""Reminder Weekly Call
 Tuesday {tuesday_short}
@@ -133,11 +162,11 @@ Tuesday {tuesday_short}
 
 Agenda:
 
-📮Sholka and Jaynaad ({shlok_jaynaad})
-📮Prasang ({prasang})
+📮Sholka and Jaynaad ({shlok_tag})
+📮Prasang ({prasang_tag})
 📮Shaba Overview ( {HARIBHAI_NAME} )
 📮Announcements ( {HARIBHAI_NAME} )
-📮Ending Sholka ({ending_shlok})
+📮Ending Sholka ({ending_tag})
 
 Link:
 https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf"""
