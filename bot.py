@@ -3,7 +3,7 @@ import json
 import random
 import requests
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -13,7 +13,7 @@ CHAT_ID = os.environ.get("CHAT_ID")
 THREAD_ID = os.environ.get("THREAD_ID")
 GCP_CREDENTIALS_JSON = os.environ.get("GCP_CREDENTIALS")
 
-# EDIT THIS to match the exact title of your Google Sheet
+# Matches your exact sheet name
 SHEET_NAME = "Weekly Call Tracker"
 
 TZ = ZoneInfo("America/New_York")
@@ -27,7 +27,7 @@ def get_next_tuesday(dt):
 def connect_to_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(GCP_CREDENTIALS_JSON)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client.open(SHEET_NAME).sheet1
 
@@ -38,22 +38,12 @@ def get_weekly_assignments():
     
     sheet = connect_to_sheet()
     
-    # Define the exact columns we want for the dashboard
-    headers = [
-        "Week Of", "Generated On", "Shlok & Jaynaad", "Prasang", 
-        "Ending Shlok", "Shaba Overview", "Eligible Pool Size", 
-        "On Cooldown", "Total Attendance", "Speaker No-Shows"
-    ]
-    
-    # If the sheet is completely empty, set up the headers
-    if not sheet.get_all_values():
-        sheet.append_row(headers)
-        
+    # Gets all data assuming Row 1 contains your manually typed headers
     records = sheet.get_all_records()
     
     # 1. Check if we already picked names for THIS upcoming Tuesday
     if records and str(records[-1].get("Week Of")) == tuesday_str:
-        return records[-1]["Shlok & Jaynaad"], records[-1]["Prasang"], records[-1]["Ending Shlok"], tuesday.strftime("%b %d")
+        return records[-1].get("Shlok & Jaynaad", ""), records[-1].get("Prasang", ""), records[-1].get("Ending Shlok", ""), tuesday.strftime("%b %d")
 
     # 2. Calculate frequencies by counting names in the log
     frequencies = {name: 0 for name in NAMES_POOL}
@@ -83,7 +73,7 @@ def get_weekly_assignments():
     pool_size = len(available_names)
     cooldown_str = ", ".join(last_week_names) if last_week_names else "None"
     
-    # 7. Save the new week's data to the Google Sheet!
+    # 7. Save the new week's data to the Google Sheet (automatically appends to the first empty row!)
     new_row = [
         tuesday_str,         # Week Of
         generated_on,        # Generated On
