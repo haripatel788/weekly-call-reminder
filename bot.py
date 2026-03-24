@@ -18,6 +18,7 @@ SHEET_NAME = "Weekly Call Tracker"
 
 TZ = ZoneInfo("America/New_York")
 HARIBHAI_NAME = "Haribhai"
+HARIBHAI_TAG = "@haripatel788"
 
 def get_next_tuesday(dt):
     days_until_tuesday = (1 - dt.weekday()) % 7
@@ -169,8 +170,8 @@ Agenda:
 
 📮Sholka and Jaynaad ({shlok_tag})
 📮Prasang ({prasang_tag})
-📮Shaba Overview ( {HARIBHAI_NAME} )
-📮Announcements ( {HARIBHAI_NAME} )
+📮Sabha Overview ({HARIBHAI_TAG})
+📮Announcements ({HARIBHAI_TAG})
 📮Ending Sholka ({ending_tag})
 
 Link:
