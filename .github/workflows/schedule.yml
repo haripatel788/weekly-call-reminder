@@ -2,9 +2,10 @@ name: Weekly Telegram Bot Reminder
 
 on:
   schedule:
-    - cron: '30 1 * * 2'  # Monday 9:30 PM EDT (Runs at 01:30 UTC Tuesday)
-    - cron: '30 0 * * 3'  # Tuesday 8:30 PM EDT (Runs at 00:30 UTC Wednesday)
-    - cron: '15 1 * * 3'  # Tuesday 9:15 PM EDT (Runs at 01:15 UTC Wednesday)
+    # Shifted off the 0/15/30 marks to avoid GitHub Action traffic jams!
+    - cron: '28 1 * * 2'  # Monday 9:28 PM EDT (Runs at 01:28 UTC Tuesday)
+    - cron: '27 0 * * 3'  # Tuesday 8:27 PM EDT (Runs at 00:27 UTC Wednesday)
+    - cron: '13 1 * * 3'  # Tuesday 9:13 PM EDT (Runs at 01:13 UTC Wednesday)
   workflow_dispatch:
 
 jobs:

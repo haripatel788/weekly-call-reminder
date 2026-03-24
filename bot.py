@@ -42,19 +42,26 @@ def get_weekly_assignments():
     freq_sheet = spreadsheet.worksheet("Frequency Tracker") # Chart
     roster_sheet = spreadsheet.worksheet("Roster")      # New Roster
     
-    # --- UPGRADE 1 & 3: Read from Roster & Check Vacation Status ---
-    roster_records = roster_sheet.get_all_records()
+    # --- BULLETPROOF ROSTER FIX: Using get_all_values() ---
+    roster_values = roster_sheet.get_all_values()
+    # Skip the header row (index 0)
+    roster_rows = roster_values[1:] if len(roster_values) > 1 else []
+    
     all_names = []
     eligible_pool = []
     name_to_tag = {}
     
-    for row in roster_records:
-        name = str(row.get("Name", "")).strip()
+    for row in roster_rows:
+        if not row:
+            continue # Skip completely empty rows
+            
+        # Safely grab the data by column index
+        name = str(row[0]).strip() if len(row) > 0 else ""
         if not name:
             continue
             
-        tag = str(row.get("Telegram Tag", "")).strip()
-        status = str(row.get("Status", "")).strip().lower()
+        tag = str(row[1]).strip() if len(row) > 1 else ""
+        status = str(row[2]).strip().lower() if len(row) > 2 else ""
         
         all_names.append(name)
         # Fallback to standard name if they don't have a Telegram tag yet
