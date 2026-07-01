@@ -26,8 +26,8 @@ COL_ENDING_SHLOK = "Ending Shlok"
 ROLE_COLUMNS = [COL_SHLOK, COL_PRASANG, COL_ENDING_SHLOK]
 
 TZ = ZoneInfo("America/New_York")
-HARIBHAI_NAME = "Haribhai"
-HARIBHAI_TAG = "@haripatel788"
+HARIBHAI_NAME = "Manav"
+HARIBHAI_TAG = "@manav1617"
 TEAMS_LINK = "https://teams.microsoft.com/meet/21298270215852?p=wPQ3hDZ6bGsQt2djIf"
 
 def get_next_tuesday(dt):
